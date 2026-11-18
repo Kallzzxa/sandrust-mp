@@ -32,7 +32,7 @@ fn tmpdir(tag: &str) -> PathBuf {
 
 fn connected_ui(dir: Option<PathBuf>) -> UiCore {
     let mut u = UiCore::new(dir, false);
-    u.on_netgame_start("127.0.0.1", 7777, b"RustClient");
+    u.on_netgame_start("127.0.0.1", 7777, b"RustClient", false);
     u.print_debug(b"Connecting to 127.0.0.1:7777...");
     let g = samp_proto::session::InitGame { server_name: "srv".into(), player_id: 0, ..Default::default() };
     u.on_init_game(&g);

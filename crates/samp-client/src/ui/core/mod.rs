@@ -37,6 +37,7 @@ pub use netstats::{NetStats, net_stats_text};
 pub mod msg {
     /// Printed when the netgame object is created.
     pub const STARTED: &str = "{FFFFFF}SA-MP {B9C9BF}0.3.7-R4 {FFFFFF}Started";
+    pub const STARTED_DL: &str = "{FFFFFF}SA-MP {B9C9BF}0.3.DL-R1 {FFFFFF}Started";
     /// Printed on each connect attempt.
     pub fn connecting(host: &str, port: u16) -> String {
         format!("Connecting to {host}:{port}...")
@@ -421,11 +422,11 @@ impl UiCore {
 
     /// The netgame object is created: "Started" (the connect lines come from
     /// `lifecycle.rs` through the client).
-    pub fn on_netgame_start(&mut self, host: &str, port: u16, name: &[u8]) {
+    pub fn on_netgame_start(&mut self, host: &str, port: u16, name: &[u8], dl: bool) {
         self.netgame = true;
         self.local_name = name.to_vec();
         self.connect_host = format!("{host}:{port}");
-        self.print_debug(msg::STARTED.as_bytes());
+        self.print_debug(if dl { msg::STARTED_DL.as_bytes() } else { msg::STARTED.as_bytes() });
     }
 
     /// RPC 139 InitGame: netgame state 5.

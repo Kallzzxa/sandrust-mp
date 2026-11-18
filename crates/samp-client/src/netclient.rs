@@ -159,6 +159,8 @@ struct Core {
     server: SocketAddrV4,
     key: CipherKey,
     name: String,
+    /// Join profile: 0.3.7-R4 by default, 0.3.DL-R1 with `-dl` (docs/DL-PLAN.md).
+    profile: session::VersionProfile,
     /// The server password as RakClient stores it (see [`NetClient::set_password`]).
     password: Vec<u8>,
     auth: AuthTable,
@@ -199,13 +201,19 @@ fn lock(core: &Mutex<Core>) -> MutexGuard<'_, Core> {
 
 impl NetClient {
     /// A session for `server`; nothing is sent before [`Self::connect`].
-    pub fn new(server: SocketAddrV4, name: &str, auth: AuthTable) -> std::io::Result<Self> {
+    pub fn new(
+        server: SocketAddrV4,
+        name: &str,
+        auth: AuthTable,
+        profile: session::VersionProfile,
+    ) -> std::io::Result<Self> {
         let core = Core {
             sock: None,
             closing: false,
             server,
             key: CipherKey::from_port(server.port()),
             name: name.to_string(),
+            profile,
             password: Vec::new(),
             auth,
             phase: Phase::Idle,
@@ -690,7 +698,7 @@ impl Core {
         let Some(challenge) = self.accepted_challenge.take() else { return };
         let Some(conn) = self.conn.as_mut() else { return };
         let serial = client_serial();
-        let payload = session::build_player_connect(&session::R4, &self.name, challenge, &serial);
+        let payload = session::build_player_connect(&self.profile, &self.name, challenge, &serial);
         conn.send_bits(&rpc::encode(rpc::ids::PLAYER_CONNECT, &payload), Reliability::Reliable, 0);
         self.phase = Phase::Joining;
         crate::log!("net: PlayerConnect sent as {:?}", self.name);
@@ -768,7 +776,7 @@ mod tests {
             std::net::SocketAddr::V4(a) => a,
             _ => unreachable!(),
         };
-        let mut c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap()).unwrap();
+        let mut c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap(), session::R4).unwrap();
         c.connect().unwrap();
         let t0 = Instant::now();
         let mut buf = [0u8; 64];
@@ -812,7 +820,7 @@ mod tests {
             std::net::SocketAddr::V4(a) => a,
             _ => unreachable!(),
         };
-        let mut c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap()).unwrap();
+        let mut c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap(), session::R4).unwrap();
         assert!(c.tick(Instant::now()).is_empty());
         assert_eq!(c.phase(), Phase::Idle);
         c.connect().unwrap();
@@ -854,7 +862,7 @@ mod tests {
         // instead of 0.
         for fresh in [false, true] {
             if fresh {
-                c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap()).unwrap();
+                c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap(), session::R4).unwrap();
             }
             c.connect().unwrap();
             server.set_nonblocking(true).unwrap();
@@ -877,7 +885,7 @@ mod tests {
             std::net::SocketAddr::V4(a) => a,
             _ => unreachable!(),
         };
-        let mut c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap()).unwrap();
+        let mut c = NetClient::new(addr, "Tester", AuthTable::parse("").unwrap(), session::R4).unwrap();
         c.set_password("pw1");
         let mut buf = [0u8; 600];
         for _ in 0..2 {

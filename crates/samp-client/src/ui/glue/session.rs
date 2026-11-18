@@ -18,8 +18,8 @@ use crate::netclient::NetClient;
 use crate::ui::core::Outgoing;
 
 /// The netgame is created (Client::start).
-pub fn on_netgame_start(host: &str, port: u16, name: &str) {
-    with_ui(|st| st.core.on_netgame_start(host, port, name.as_bytes()));
+pub fn on_netgame_start(host: &str, port: u16, name: &str, dl: bool) {
+    with_ui(|st| st.core.on_netgame_start(host, port, name.as_bytes(), dl));
 }
 
 /// The configured frame limit (`fpslimit`, 20..90), if the UI exists and is not busy.

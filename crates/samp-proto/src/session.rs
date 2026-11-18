@@ -17,6 +17,12 @@ pub struct VersionProfile {
 /// Both known 0.3.7-R4 builds (2019 and 2021) behave identically on the wire.
 pub const R4: VersionProfile = VersionProfile { netgame_version: 4057, mod_flag: 1, version_string: "0.3.7-R4" };
 
+/// 0.3.DL-R1 (custom models). The join packet layout is byte-identical to R4;
+/// only the version number (0xFDE = 4062) and the version string differ
+/// (1therealcloud/samp `net/netgame.cpp`: `version = 0xfde`,
+/// `g_netClientVersion[] = "0.3.DL-R1"`). See `docs/DL-PLAN.md`.
+pub const DL_R1: VersionProfile = VersionProfile { netgame_version: 4062, mod_flag: 1, version_string: "0.3.DL-R1" };
+
 /// Body of `0x22` connection-request-accepted (exactly 13 bytes).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Accepted {
@@ -301,6 +307,27 @@ mod tests {
         assert_eq!(r.read_bytes(2).as_deref(), Some(&b"AB"[..]));
         assert_eq!(r.read_u8(), Some(8));
         assert_eq!(r.read_bytes(8).as_deref(), Some(&b"0.3.7-R4"[..]));
+        assert_eq!(r.read_u32(), Some(resp));
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn player_connect_layout_dl() {
+        // 0.3.DL-R1: same layout as R4, version 4062 and "0.3.DL-R1" (9 chars).
+        // Cross-checked against 1therealcloud/samp Packet_ConnectionSucceeded
+        // (version 0xfde, mod byte 1, challenge ^ 0xfde twice).
+        let w = build_player_connect(&DL_R1, "Bot", 0x1000, "AB");
+        let mut r = BitReader::new(w.as_bytes());
+        assert_eq!(r.read_u32(), Some(4062));
+        assert_eq!(r.read_u8(), Some(1));
+        assert_eq!(r.read_u8(), Some(3));
+        assert_eq!(r.read_bytes(3).as_deref(), Some(&b"Bot"[..]));
+        let resp = 0x1000 ^ 4062;
+        assert_eq!(r.read_u32(), Some(resp));
+        assert_eq!(r.read_u8(), Some(2));
+        assert_eq!(r.read_bytes(2).as_deref(), Some(&b"AB"[..]));
+        assert_eq!(r.read_u8(), Some(9));
+        assert_eq!(r.read_bytes(9).as_deref(), Some(&b"0.3.DL-R1"[..]));
         assert_eq!(r.read_u32(), Some(resp));
         assert_eq!(r.remaining(), 0);
     }

@@ -3,7 +3,9 @@
 //! DLL into it with a remote `LoadLibraryW` thread, then resumes the game.
 //!
 //! Usage: samp-launcher [--gta PATH] [--dll PATH]... [--name NAME] [--host HOST] [--port PORT] [--password PASS]
-//!        [--no-wait]
+//!        [--no-wait] [--dl]
+//!
+//! `--dl` joins as 0.3.DL-R1 (custom models) instead of 0.3.7-R4 (docs/DL-PLAN.md).
 //!
 //! `--dll` may be given several times; the DLLs are loaded in that order
 //! (e.g. `--dll samp-tracer.dll --dll samp.dll`) before the game resumes.
@@ -19,6 +21,8 @@ struct Options {
     /// Server password, passed as `-z` only when given.
     password: Option<String>,
     wait: bool,
+    /// Join as 0.3.DL-R1 (custom models) instead of 0.3.7-R4.
+    dl: bool,
 }
 
 fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String> {
@@ -30,6 +34,7 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String
         port: 7777,
         password: None,
         wait: true,
+        dl: false,
     };
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
@@ -42,6 +47,7 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String
             "--port" => o.port = val("--port")?.parse().map_err(|_| "--port must be 1..65535".to_string())?,
             "--password" => o.password = Some(val("--password")?),
             "--no-wait" => o.wait = false,
+            "--dl" => o.dl = true,
             "--help" | "-?" => return Err(USAGE.into()),
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
         }
@@ -56,7 +62,7 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String
 }
 
 const USAGE: &str = "usage: samp-launcher [--gta PATH] [--dll PATH]... [--name NAME] [--host HOST] [--port PORT] \
-     [--password PASS] [--no-wait]";
+     [--password PASS] [--no-wait] [--dl]";
 
 /// The client reads `-z` as one word of the raw command line (docs/re/handshake.md, "Command line"): it ends at
 /// a space, `-` or `/`, quotes are not removed, and past 254 characters the bytes sent no longer match the
@@ -113,6 +119,9 @@ fn command_line(o: &Options) -> String {
 fn samp_client_args(o: &Options) -> Vec<String> {
     let mut args: Vec<String> =
         ["-c", "-n", &o.name, "-h", &o.host, "-p", &o.port.to_string()].iter().map(|s| s.to_string()).collect();
+    if o.dl {
+        args.push("-dl".to_string());
+    }
     if let Some(p) = &o.password {
         args.extend(["-z".to_string(), p.clone()]);
     }
@@ -362,6 +371,14 @@ mod tests {
         let o = parse_args(s(&["--gta", "gta_sa.exe", "--name", "Rusty", "--password", "s3cret.Pw_1"])).unwrap();
         assert_eq!(command_line(&o), "gta_sa.exe -c -n Rusty -h 127.0.0.1 -p 7777 -z s3cret.Pw_1");
         assert_eq!(parse_args(s(&[])).unwrap().password, None);
+    }
+
+    #[test]
+    fn dl_flag_appends_dl_switch() {
+        let o = parse_args(s(&["--name", "Rusty", "--dl"])).unwrap();
+        assert!(o.dl);
+        assert_eq!(command_line(&o), "gta_sa.exe -c -n Rusty -h 127.0.0.1 -p 7777 -dl");
+        assert!(!parse_args(s(&[])).unwrap().dl);
     }
 
     #[test]

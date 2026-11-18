@@ -15,6 +15,7 @@ use samp_proto::auth::AuthTable;
 const USAGE: &str = "\
 usage: samp-bot [HOST:PORT] [options]
   --name NAME          nickname (default RustBot)
+  --dl                 join as 0.3.DL-R1 (custom models) instead of 0.3.7-R4
   --seconds N          session length (default 15); a seated bot leaves its vehicle first
   --auth-table PATH    default data/auth_table.txt
   --class N            class to request (default 0)
@@ -47,6 +48,8 @@ struct Args {
     target: String,
     seconds: u64,
     auth_table: String,
+    /// Join as 0.3.DL-R1 instead of 0.3.7-R4 (docs/DL-PLAN.md).
+    dl: bool,
     cfg: Config,
 }
 
@@ -55,6 +58,7 @@ fn parse_args() -> std::result::Result<Args, String> {
         target: "127.0.0.1:7777".into(),
         seconds: 15,
         auth_table: "data/auth_table.txt".into(),
+        dl: false,
         cfg: Config::default(),
     };
     let mut path = "circle".to_owned();
@@ -67,6 +71,7 @@ fn parse_args() -> std::result::Result<Args, String> {
         let c = &mut a.cfg;
         match arg.as_str() {
             "--name" => c.name = it.next().ok_or("--name needs a value")?,
+            "--dl" => a.dl = true,
             "--seconds" => a.seconds = num("--seconds", it.next())?,
             "--auth-table" => a.auth_table = it.next().ok_or("--auth-table needs a path")?,
             "--class" => c.class = num("--class", it.next())?,
@@ -148,7 +153,12 @@ fn main() -> Result<()> {
     })?)
     .map_err(|e| format!("auth table parse error at line {}", e.line))?;
 
-    let mut client = Client::connect(&args.target, &args.cfg.name, table)?;
+    let mut client = if args.dl {
+        println!("[join] 0.3.DL-R1 profile (custom models)");
+        Client::connect_with_profile(&args.target, &args.cfg.name, table, samp_proto::session::DL_R1)?
+    } else {
+        Client::connect(&args.target, &args.cfg.name, table)?
+    };
     let start = Instant::now();
     let mut bot = Bot::new(args.cfg, start);
     let deadline = start + Duration::from_secs(args.seconds);

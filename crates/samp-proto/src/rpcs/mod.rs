@@ -319,6 +319,18 @@ mod tests {
     }
 
     #[test]
+    fn dl_profile_registers_the_dormant_model_rpcs() {
+        // A 0.3.DL-R1 client registers the R4 set plus the custom-model RPCs
+        // 179, 183, 185 (docs/DL-PLAN.md); 144 ids in total.
+        assert_eq!(REGISTERED_S2C.len() + world::DORMANT_IN_R4.len(), 144);
+        for id in world::DORMANT_IN_R4 {
+            assert!(!REGISTERED_S2C.contains(id));
+            let zeros = [0u8; 512];
+            assert!(decode(*id, &mut BitReader::new(&zeros)).is_some(), "id {id} must decode");
+        }
+    }
+
+    #[test]
     fn every_registered_id_has_exactly_one_owner() {
         for id in REGISTERED_S2C {
             let found: Vec<&str> =

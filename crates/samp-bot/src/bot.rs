@@ -11,7 +11,7 @@
 use std::f32::consts::TAU;
 use std::time::{Duration, Instant};
 
-use samp_proto::rpcs::{Incoming, player, remote, ui, vehicle};
+use samp_proto::rpcs::{Incoming, player, remote, ui, vehicle, world};
 use samp_proto::session::{self, InitGame};
 use samp_proto::sync::player::{AimSync, Animation, BulletSync, FootSync, SpectatorSync, StatsSync, hit_type};
 use samp_proto::sync::vehicle::{PassengerSync, VehicleSync};
@@ -375,6 +375,17 @@ impl Bot {
             }
             Incoming::Player(p) => self.handle_player_rpc(p, now, out),
             Incoming::Vehicle(v) => self.handle_vehicle_rpc(v, now),
+            // 0.3.DL custom models (RPC 179/183/185; dormant in R4). The bot
+            // only logs them — the download manager is Phase B (docs/DL-PLAN.md).
+            Incoming::World(world::Incoming::ModelRequest(m)) => println!(
+                "[dl] model request pool {} count {} type {} base {} new {} dff {:#x} ({} B) txd {:#x} ({} B)",
+                m.pool_id, m.count, m.model_type, m.base_id, m.new_id, m.dff_checksum, m.dff_size,
+                m.txd_checksum, m.txd_size
+            ),
+            Incoming::World(world::Incoming::ModelUrl(u)) => println!("[dl] model url {:?}", u),
+            Incoming::World(world::Incoming::DownloadCompleted(_)) => {
+                println!("[dl] downloads complete")
+            }
             Incoming::Ui(ui::Incoming::SendClientMessage(m)) => println!("[chat {:08x}] {}", m.colour, text(&m.message)),
             Incoming::Ui(ui::Incoming::SendGameText(g)) => println!("[gametext] {}", text(&g.text)),
             Incoming::Ui(ui::Incoming::ShowDialog(d)) => {

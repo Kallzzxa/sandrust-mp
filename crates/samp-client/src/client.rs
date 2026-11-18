@@ -125,12 +125,13 @@ impl Client {
         let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read auth table {path}: {e}"))?;
         let auth = AuthTable::parse(&text).map_err(|e| format!("auth table {path}: parse error at line {}", e.line))?;
         let server = crate::netclient::resolve(&host, port).map_err(|e| format!("resolve {host}:{port}: {e}"))?;
+        let profile = if args.dl { samp_proto::session::DL_R1 } else { samp_proto::session::R4 };
         crate::log!("client: connecting to {server} as {name:?} (auth table {path}, {} entries)", auth.len());
-        let mut net = NetClient::new(server, &name, auth).map_err(|e| format!("udp socket: {e}"))?;
+        let mut net = NetClient::new(server, &name, auth, profile).map_err(|e| format!("udp socket: {e}"))?;
         net.set_password(args.password.as_deref().unwrap_or(""));
         // "Started"; the connect tick starts the session more than 3000 ms after the netgame constructor
         // (lifecycle.rs).
-        crate::ui::on_netgame_start(&host, port, &name);
+        crate::ui::on_netgame_start(&host, port, &name, args.dl);
         let now = Instant::now();
         Ok(Self {
             net,

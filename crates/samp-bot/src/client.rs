@@ -36,6 +36,8 @@ pub struct Client {
     conn: Connection,
     table: AuthTable,
     name: String,
+    /// Join profile: R4 by default, DL-R1 with `--dl` (docs/DL-PLAN.md).
+    profile: session::VersionProfile,
     buf: [u8; 1500],
 }
 
@@ -43,13 +45,23 @@ impl Client {
     /// Resolve `target`, run the cookie handshake and send the RakNet
     /// connection request. The join itself happens in [`Client::pump`].
     pub fn connect(target: &str, name: &str, table: AuthTable) -> Result<Self> {
+        Self::connect_with_profile(target, name, table, session::R4)
+    }
+
+    /// Like [`Self::connect`], but joins with the given version profile.
+    pub fn connect_with_profile(
+        target: &str,
+        name: &str,
+        table: AuthTable,
+        profile: session::VersionProfile,
+    ) -> Result<Self> {
         let server = target.to_socket_addrs()?.next().ok_or("could not resolve address")?;
         let mut net = Net::connect(server)?;
         let mut buf = [0u8; 1500];
         net.open_connection(&mut buf)?;
         let mut conn = Connection::new(Instant::now());
         conn.send_bytes(&[id::CONNECTION_REQUEST], Reliability::Reliable, 0);
-        Ok(Self { net, conn, table, name: name.into(), buf })
+        Ok(Self { net, conn, table, name: name.into(), profile, buf })
     }
 
     /// Flush queued datagrams, wait up to `wait` for one datagram and turn it
@@ -108,7 +120,7 @@ impl Client {
                 self.conn.send_bytes(&[id::KEEP_ALIVE], Reliability::Reliable, 0);
 
                 let serial = session::make_serial(&pseudo_random_hex40());
-                let connect = rpcs::session::PlayerConnect::new(&session::R4, &self.name, acc.challenge, &serial);
+                let connect = rpcs::session::PlayerConnect::new(&self.profile, &self.name, acc.challenge, &serial);
                 crate::send_rpc(self, &connect);
                 println!("[join] sent PlayerConnect as {:?}", self.name);
                 events.push(Event::Joining);
