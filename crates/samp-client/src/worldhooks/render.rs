@@ -84,6 +84,7 @@ fn draw_object(o: &ObjInfo) {
             f(cam, sphere.as_ptr())
         };
         if r == 0 {
+            FRUSTUM_CULLED.fetch_add(1, Ordering::Relaxed);
             return;
         }
     }

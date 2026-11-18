@@ -197,6 +197,7 @@ pub struct Objects {
     removals: u32,
     edit: Edit,
     last_pass: Option<Instant>,
+    last_diag: Option<Instant>,
     epoch: Option<Instant>,
     local_id: Option<u16>,
     /// The editor's matrix copy (samp editor object +0xC3): taken at the button press, its position follows the
@@ -317,6 +318,58 @@ impl Objects {
             }
             if let Some(m) = o.motion {
                 move_step(o, &m, dt, now_ms);
+            }
+        }
+        // Diagnostic (v10): every 5 s, summarise the samp-pass pipeline (pool / samp-qualifying /
+        // material / drawn-by-samp / RW object / radius-0, plus the render counters) and list up to
+        // 5 samp-qualifying objects that are NOT being drawn, so a missing-object report can be
+        // traced to creation, streaming, culling or drawing.
+        let diag_due = self.last_diag.map(|t| now.duration_since(t).as_secs_f32() >= 5.0).unwrap_or(true);
+        if diag_due {
+            self.last_diag = Some(now);
+            let mut pool = 0u32;
+            let mut samp = 0u32;
+            let mut mat = 0u32;
+            let mut drawn = 0u32;
+            let mut rw = 0u32;
+            let mut r0 = 0u32;
+            let mut stuck: Vec<String> = Vec::new();
+            for o in self.pool.values() {
+                if o.ptr == 0 {
+                    continue;
+                }
+                pool += 1;
+                if !world::drawn_by_samp(o.has_materials(), o.draw_distance, false) {
+                    continue;
+                }
+                samp += 1;
+                if o.has_materials() {
+                    mat += 1;
+                }
+                if o.radius == 0.0 {
+                    r0 += 1;
+                }
+                let has_rw = rd::<u32>(o.ptr + g::ENTITY_RW_OBJECT) != 0;
+                if has_rw {
+                    rw += 1;
+                }
+                if o.drawn_by_samp {
+                    drawn += 1;
+                } else if stuck.len() < 5 {
+                    stuck.push(format!(
+                        "id={} model={} mat={} dd={:.0} r={:.1} camd={:.0} rw={}",
+                        o.id, o.model, o.has_materials(), o.draw_distance, o.radius, o.cam_dist, has_rw
+                    ));
+                }
+            }
+            crate::log!(
+                "objects: diag pool={pool} samp={samp} mat={mat} drawn={drawn} rw={rw} r0={r0} filtered={} pass_draws={} frustum_culled={}",
+                wh::FILTERED.load(std::sync::atomic::Ordering::Relaxed),
+                wh::PASS_DRAWS.load(std::sync::atomic::Ordering::Relaxed),
+                wh::FRUSTUM_CULLED.load(std::sync::atomic::Ordering::Relaxed)
+            );
+            for s in stuck {
+                crate::log!("objects: diag stuck {s}");
             }
         }
         self.publish(players);

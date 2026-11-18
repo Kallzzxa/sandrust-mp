@@ -186,6 +186,8 @@ fn try_shared<R>(f: impl FnOnce(&mut Shared) -> R) -> Option<R> {
 /// Diagnostics: objects drawn by our own passes, and objects the render-list filter kept out of GTA's list.
 pub static PASS_DRAWS: AtomicU32 = AtomicU32::new(0);
 pub static FILTERED: AtomicU32 = AtomicU32::new(0);
+/// Diagnostics: samp-pass objects the draw's frustum test rejected.
+pub static FRUSTUM_CULLED: AtomicU32 = AtomicU32::new(0);
 /// Diagnostics: radar gang-overlay hook calls, calls that found the shared state busy, zones drawn.
 pub static ZONE_CALLS: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
 
