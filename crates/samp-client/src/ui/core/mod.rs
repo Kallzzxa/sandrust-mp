@@ -36,7 +36,7 @@ pub use netstats::{NetStats, net_stats_text};
 /// Client-local strings from samp.dll's read-only data, all printed as type-8 (debug) chat lines.
 pub mod msg {
     /// Printed when the netgame object is created.
-    pub const STARTED: &str = "{FFFFFF}SA-MP {B9C9BF}0.3.7-R4 {FFFFFF}Started";
+    pub const STARTED: &str = "{FFFFFF}NyX Launcher {B9C9BF}1.1.0-B {FFFFFF}Started";
     pub const STARTED_DL: &str = "{FFFFFF}MC-RP {B9C9BF}Costum Launcher {FFFFFF}Started";
     /// Printed after `STARTED` when the launcher downgraded a 0.3.DL-R1 join
     /// to 0.3.7 because the server cannot take DL clients (compat switch).

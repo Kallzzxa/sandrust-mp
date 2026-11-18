@@ -212,3 +212,23 @@ u32 challenge ^ version   (trailing copy)
 - Lesson: the auth table is per-server-implementation. A server that sends
   a challenge outside every known table will always fail closed with
   "not in table" — the log line is the diagnostic, not the open phase.
+
+## v7 (2026-11-18) — Started message renamed; table-free auth investigated
+
+- `msg::STARTED` is now `"{FFFFFF}NyX Launcher {B9C9BF}1.1.0-B
+  {FFFFFF}Started"` (was `"SA-MP 0.3.7-R4 Started"`). `STARTED_DL` and
+  `COMPAT_SWITCH` unchanged. Only `samp_client.dll` rebuilt for v7.
+- Table-free auth (user asked: join every server without the challenge
+  table): **not possible by skipping the challenge** — stock/open.mp only
+  send `0x22` after `CheckAuth` passes (the `NPC` reply is NPC-only).
+  Tested whether the response is computable from the 512 known pairs:
+  response is NOT `SHA-1(challenge)`, NOT `SHA-1(challenge) XOR` a fixed
+  20-byte key (512 distinct keys), NOT a per-position function/addition of
+  the SHA-1 bytes, NOT reversed/nibble-swapped/lowercase SHA-1. The
+  original client's mix (SHA-1 + fixed game-process data, handshake.md
+  §4) is not recoverable from samples alone. Practical coverage: the
+  merged 512-pair table already covers the server types the user named —
+  stock `samp03svr`/`samp-server.exe` (same stock table) and open.mp.
+  A truly universal client would need the original client's auth function
+  (`samp.dll` 0x100576f0) reverse-engineered — a separate RE job, not
+  attempted here.
