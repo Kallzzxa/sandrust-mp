@@ -4,7 +4,7 @@
 //! logo, "NYX LAUNCHER" title and a blue "Connect To Server" button; city
 //! sunset banner on the right; frameless window with rounded corners.
 //!
-//! Connect goes to 192.168.1.4:7777 (the user's local server) as 0.3.DL-R1.
+//! Connect goes to play.swdm.my.id:7777 as 0.3.DL-R1.
 //! There is no version picker: `samp-launcher` asks the server for its
 //! version first and joins as 0.3.7-R4 when the server cannot take a DL
 //! client (compat switch), so the same button works for both.
@@ -26,8 +26,8 @@ use std::time::Duration;
 
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, RichText, Rounding, Sense, Stroke, Vec2};
 
-/// Server the Connect button joins (the user's local server).
-const DEFAULT_HOST: &str = "192.168.1.4";
+/// Server the Connect button joins.
+const DEFAULT_HOST: &str = "play.swdm.my.id";
 const DEFAULT_PORT: u16 = 7777;
 const USERNAME_FILE: &str = "username.txt";
 const LOG_FILE: &str = "nyx-launcher.log";
