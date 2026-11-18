@@ -183,3 +183,32 @@ u32 challenge ^ version   (trailing copy)
 - The NYX title font is now an embedded bold font (Liberation Sans Bold,
   `assets/TitleBold.ttf`): egui's default font has no bold weight, so
   `.strong()` still rendered thin.
+
+## Stock auth table (v6, 2026-11-18) — the server is stock samp03svr, not open.mp
+
+- The user's local RP server (192.168.1.4:7777, "RP omp-cef Server") runs
+  the **stock `samp03svr`** from the rp-omp-cef serverpack — not omp-server.
+  The cef.so plugin loads on it, but the RakNet auth table is the stock
+  server's own, NOT open.mp's.
+- Symptom (v5): compat switch worked ("SA-MP 0.3.7-R4 Started" +
+  COMPAT_SWITCH), open-connection accepted after 2 requests, then stuck
+  forever at "Connecting to 192.168.1.4:7777...". `samp-rs.log`:
+  `net: auth challenge 7BE54C3EAF7E7E not in table` → `session closed:
+  auth challenge not in table`; samp-bot: `challenge 5474B6545366252
+  not in table`. The client closes silently (no chat line), so the screen
+  stays on "Connecting...".
+- Stock table: 256 pairs embedded in `samp03svr` as a contiguous array of
+  96-byte entries — [challenge: 32 bytes][response: 64 bytes], NUL-padded,
+  base 0x148960. Challenges are 12–16 hex chars, responses 40 hex chars.
+  Extracted with `tools/extract_auth_table_stock.py` (finds the run of 256
+  40-hex strings spaced 96 bytes apart, validates every entry). Both
+  observed challenges resolve through it. **Zero overlap** with open.mp's
+  256 pairs, so the two tables merge safely.
+- Shipped `data/auth_table.txt` is now the **merged 512-pair** table
+  (open.mp + stock). No code change: `AuthTable::parse` reads one pair per
+  line. The DLL and samp-bot both read the same file, so one merged file
+  fixes both. v6 reuses the v5 binaries byte-for-byte; only the table
+  changed.
+- Lesson: the auth table is per-server-implementation. A server that sends
+  a challenge outside every known table will always fail closed with
+  "not in table" — the log line is the diagnostic, not the open phase.
