@@ -108,3 +108,18 @@ u32 challenge ^ version   (trailing copy)
   The whole build stays `cargo build --release --target
   i686-pc-windows-gnu`.
 - Another GTA version: 1.0 US throughout.
+
+## MC-RP Launcher GUI (2026-11-18, commit e6c6ec1)
+
+- New crate `samp-launcher-gui`, binary `mc-rp-launcher.exe` (Win32 GUI
+  subsystem): server-browser GUI in the shape of samp.exe, dark theme +
+  crimson accent. Favorites (`favorites.txt`, `name|host|port`), live
+  server info via the SA-MP query protocol (opcode `i`, 1.5 s timeout),
+  nickname/host/port/password fields, DL checkbox (on by default),
+  owner-drawn Connect button, log box streaming `samp-launcher.exe`
+  output. The GUI sets `SAMP_RS_AUTH_TABLE` from `data/auth_table.txt`
+  next to the exe. Query + favorites are platform-independent and
+  host-tested; the Win32 window is Windows-only and BUILD-ONLY (never
+  run on a real Windows desktop here).
+- `STARTED_DL` is now `"{FFFFFF}MC-RP {B9C9BF}Costum Launcher
+  {FFFFFF}Started"` (user's spelling, "Costum").
