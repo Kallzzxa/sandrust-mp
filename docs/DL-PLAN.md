@@ -123,3 +123,37 @@ u32 challenge ^ version   (trailing copy)
   run on a real Windows desktop here).
 - `STARTED_DL` is now `"{FFFFFF}MC-RP {B9C9BF}Costum Launcher
   {FFFFFF}Started"` (user's spelling, "Costum").
+
+## NYX Launcher (2026-11-18)
+
+- New crate `nyx-launcher`, binary `nyx-launcher.exe` (eframe 0.29 /
+  egui, Windows GUI subsystem): the NYX design from the user's mockup —
+  dark left panel (rgb 38,39,41), NYX logo top-left, "NYX LAUNCHER"
+  title (blue + white), "San Andreas Multiplayer Costum Launcher"
+  subtitle ("Louncher" typo in the mockup fixed to "Launcher",
+  "Costum" spelling kept), gradient username field, blue
+  "Connect To Server" button, city-sunset banner on the right,
+  frameless window with rounded corners (860x520), custom
+  minimize/close buttons, drag area. Assets embedded at compile time
+  (`assets/banner.jpg` from the user's sunset photo, 730x694;
+  `assets/logo.png` from the user's NYX logo, 517x483 RGBA).
+- Connect joins 192.168.1.4:7777 (the user's local server, 0.3.7) —
+  no server picker, by the user's request. The 0.3.DL-R1 checkbox is
+  OFF by default (that server is 0.3.7); tick it only for a DL server.
+  Nickname is remembered in `username.txt`; child output streams to
+  the status line and `nyx-launcher.log`; the child is spawned with
+  CREATE_NO_WINDOW so no black console pops up. Same launch path as
+  the Win32 GUI: `samp-launcher.exe --gta gta_sa.exe --dll
+  samp_client.dll --name <nick> --host 192.168.1.4 --port 7777
+  [--dl]`, `SAMP_RS_AUTH_TABLE` from `data/auth_table.txt`.
+- eframe 0.29 API notes (the Gemini code was written for a newer
+  egui): the type is `Rounding` (not `CornerRadius`), `Rounding::same`
+  takes f32, `Frame::rounding` / `Image::rounding` (not
+  `corner_radius`), `Painter::rect_stroke` takes 3 args (no
+  `StrokeKind`). Build: `cargo build --release --target
+  i686-pc-windows-gnu -p nyx-launcher` (cross-compiles fine;
+  first build ~8 min for the eframe dep tree). Binary is ~20 MB
+  stripped (MinGW strip), vs 1.4 MB for the Win32 GUI.
+- BUILD-ONLY, like the Win32 GUI: never run on a real Windows desktop
+  here; the user is the first tester. `mc-rp-launcher.exe` is still
+  shipped in the same zip for the DL server (play.uifserver.net:7776).
