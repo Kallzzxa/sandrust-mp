@@ -4,8 +4,10 @@
 //! logo, "NYX LAUNCHER" title and a blue "Connect To Server" button; city
 //! sunset banner on the right; frameless window with rounded corners.
 //!
-//! Connect goes to 192.168.1.4:7777 (the user's local server). The
-//! 0.3.DL-R1 checkbox is off by default because that server is 0.3.7.
+//! Connect goes to 192.168.1.4:7777 (the user's local server) as 0.3.DL-R1.
+//! There is no version picker: `samp-launcher` asks the server for its
+//! version first and joins as 0.3.7-R4 when the server cannot take a DL
+//! client (compat switch), so the same button works for both.
 //!
 //! The GUI does not launch the game itself: it shells out to
 //! `samp-launcher.exe` next to it (same folder) and streams that process's
@@ -22,7 +24,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use eframe::egui::{self, Color32, Rounding, FontId, Pos2, Rect, RichText, Sense, Stroke, Vec2};
+use eframe::egui::{self, Color32, FontId, Pos2, Rect, RichText, Rounding, Sense, Stroke, Vec2};
 
 /// Server the Connect button joins (the user's local server).
 const DEFAULT_HOST: &str = "192.168.1.4";
@@ -46,6 +48,14 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| {
             // Inisialisasi loader gambar (PNG & JPG)
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            // Font tebal buat judul (default egui cuma punya font tipis, jadi
+            // .strong() pun tetap kelihatan kurus).
+            let mut fonts = egui::FontDefinitions::default();
+            fonts
+                .font_data
+                .insert("TitleBold".to_owned(), egui::FontData::from_static(include_bytes!("../assets/TitleBold.ttf")));
+            fonts.families.entry(egui::FontFamily::Name("TitleBold".into())).or_default().push("TitleBold".to_owned());
+            cc.egui_ctx.set_fonts(fonts);
             Ok(Box::new(NyxLauncher::new()))
         }),
     )
@@ -63,7 +73,6 @@ enum ChildMsg {
 
 struct NyxLauncher {
     username: String,
-    dl: bool,
     status_text: String,
     launching: bool,
     rx: Option<Receiver<ChildMsg>>,
@@ -73,7 +82,7 @@ impl NyxLauncher {
     fn new() -> Self {
         let username =
             std::fs::read_to_string(exe_dir().join(USERNAME_FILE)).map(|s| s.trim().to_string()).unwrap_or_default();
-        Self { username, dl: false, status_text: String::new(), launching: false, rx: None }
+        Self { username, status_text: String::new(), launching: false, rx: None }
     }
 
     fn on_connect(&mut self) {
@@ -114,16 +123,10 @@ impl NyxLauncher {
             "--port".into(),
             DEFAULT_PORT.to_string(),
         ];
-        if self.dl {
-            args.push("--dl".into());
-        }
-        self.status_text = format!(
-            "Connecting as {} to {}:{} ({}).",
-            name,
-            DEFAULT_HOST,
-            DEFAULT_PORT,
-            if self.dl { "0.3.DL-R1" } else { "0.3.7" }
-        );
+        // Selalu 0.3.DL-R1: samp-launcher yang nego versi sama server — kalau
+        // servernya 0.3.7, dia otomatis switch ke 0.3.7-R4.
+        args.push("--dl".into());
+        self.status_text = format!("Connecting as {name} to {DEFAULT_HOST}:{DEFAULT_PORT} (0.3.DL-R1).");
         let mut cmd = Command::new(&launcher);
         cmd.args(&args).current_dir(&dir).stdout(Stdio::piped()).stderr(Stdio::piped());
         #[cfg(windows)]
@@ -257,15 +260,10 @@ impl eframe::App for NyxLauncher {
                 ui.vertical_centered(|ui| {
                     ui.add_space(95.0);
 
-                    // Judul: NYX LAUNCHER
-                    ui.label(
-                        RichText::new("NYX")
-                            .font(FontId::proportional(28.0))
-                            .strong()
-                            .color(Color32::from_rgb(0, 136, 255)),
-                    );
+                    // Judul: NYX LAUNCHER (font bold embed, bukan default egui yang tipis)
+                    ui.label(RichText::new("NYX").font(title_font(32.0)).color(Color32::from_rgb(0, 136, 255)));
                     ui.add_space(-6.0);
-                    ui.label(RichText::new("LAUNCHER").font(FontId::proportional(26.0)).strong().color(Color32::WHITE));
+                    ui.label(RichText::new("LAUNCHER").font(title_font(30.0)).color(Color32::WHITE));
 
                     ui.add_space(6.0);
                     ui.label(
@@ -318,7 +316,7 @@ impl eframe::App for NyxLauncher {
                         btn_rect.center(),
                         egui::Align2::CENTER_CENTER,
                         if self.launching { "Connecting..." } else { "Connect To Server" },
-                        FontId::proportional(15.0),
+                        title_font(15.0),
                         Color32::WHITE,
                     );
 
@@ -327,9 +325,6 @@ impl eframe::App for NyxLauncher {
                     }
 
                     ui.add_space(10.0);
-
-                    // Checkbox 0.3.DL-R1 (mati default: server 192.168.1.4:7777 itu 0.3.7)
-                    ui.checkbox(&mut self.dl, "0.3.DL-R1 (custom models)");
 
                     if !self.status_text.is_empty() {
                         ui.add_space(10.0);
@@ -395,6 +390,11 @@ impl eframe::App for NyxLauncher {
             }
         });
     }
+}
+
+// Font judul tebal (Liberation Sans Bold, di-embed biar nggak tergantung font Windows).
+fn title_font(size: f32) -> FontId {
+    FontId::new(size, egui::FontFamily::Name("TitleBold".into()))
 }
 
 // Helper untuk menggambar gradien horizontal pada kotak input username

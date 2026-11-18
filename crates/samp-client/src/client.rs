@@ -131,7 +131,7 @@ impl Client {
         net.set_password(args.password.as_deref().unwrap_or(""));
         // "Started"; the connect tick starts the session more than 3000 ms after the netgame constructor
         // (lifecycle.rs).
-        crate::ui::on_netgame_start(&host, port, &name, args.dl);
+        crate::ui::on_netgame_start(&host, port, &name, args.dl, args.compat);
         let now = Instant::now();
         Ok(Self {
             net,

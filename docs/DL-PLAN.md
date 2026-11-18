@@ -157,3 +157,29 @@ u32 challenge ^ version   (trailing copy)
 - BUILD-ONLY, like the Win32 GUI: never run on a real Windows desktop
   here; the user is the first tester. `mc-rp-launcher.exe` is still
   shipped in the same zip for the DL server (play.uifserver.net:7776).
+
+## Compat: DL client joining 0.3.7 servers (2026-11-18)
+
+- The NYX launcher has no version picker: it always requests a DL join
+  (`--dl`). `samp-launcher` asks the server for its version first (query
+  opcode `r`, rule `version`, 1.5 s timeout) and, when the server reports
+  0.3.7 (e.g. `0.3.7-R2`), joins as 0.3.7-R4 instead — the
+  samp-client-compat behaviour, built into the client. A server that does
+  not answer the query keeps the requested mode. The switch prints
+  "The Server Cannot Support 0.3 DL-R1 Switch To 0.3.7" (launcher stderr,
+  hence the NYX status line) and the client passes `-compat` on the game
+  command line, so the DLL prints the same line in-game after "Started".
+- Why it works: the join packet layout is byte-identical between R4 and
+  DL_R1; only `netgame_version` (4057 vs 4062) and the version string
+  differ (`session::R4` / `session::DL_R1`). A 0.3.7 server accepts any
+  0.3.7 client, so joining as R4 is a normal 0.3.7 join — no custom
+  models, skins fall back to the base ones (same consequence as the
+  server-side samp-compat plugin).
+- `cmdline::ConnectArgs` gained a `compat` flag (`-compat` switch);
+  `client.rs` passes it to `ui::on_netgame_start`, which prints
+  `msg::COMPAT_SWITCH` after the Started line. Host tests cover the
+  rules parser, the negotiation decision, the `-compat` round-trip and
+  the in-game notice.
+- The NYX title font is now an embedded bold font (Liberation Sans Bold,
+  `assets/TitleBold.ttf`): egui's default font has no bold weight, so
+  `.strong()` still rendered thin.

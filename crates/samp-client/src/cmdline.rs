@@ -13,6 +13,10 @@ pub struct ConnectArgs {
     pub connect: bool,
     /// `-dl` was present: join as 0.3.DL-R1 instead of 0.3.7-R4 (docs/DL-PLAN.md).
     pub dl: bool,
+    /// `-compat` was present: the launcher downgraded a 0.3.DL-R1 join to
+    /// 0.3.7 because the server cannot take DL clients; the client prints
+    /// the switch notice in-game.
+    pub compat: bool,
 }
 
 /// samp reads a switch's value as one word: it stops at the first space, `-` or `/`, so a value never
@@ -23,12 +27,14 @@ fn word(value: &str) -> String {
 
 /// Parses the arguments after the executable name. Unknown flags are ignored.
 pub fn parse<I: IntoIterator<Item = String>>(args: I) -> ConnectArgs {
-    let mut out = ConnectArgs { name: None, host: None, port: None, password: None, connect: false, dl: false };
+    let mut out =
+        ConnectArgs { name: None, host: None, port: None, password: None, connect: false, dl: false, compat: false };
     let mut it = args.into_iter().peekable();
     while let Some(a) = it.next() {
         match a.as_str() {
             "-c" => out.connect = true,
             "-dl" => out.dl = true,
+            "-compat" => out.compat = true,
             "-n" => out.name = it.next(),
             "-h" => out.host = it.next(),
             "-p" => out.port = it.next().and_then(|p| p.parse().ok()),
@@ -45,12 +51,15 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> ConnectArgs {
 }
 
 /// Builds the argument list for gta_sa.exe (without the executable name); `-z` only with a password,
-/// `-dl` only for a 0.3.DL-R1 join.
-pub fn to_args(name: &str, host: &str, port: u16, password: Option<&str>, dl: bool) -> Vec<String> {
+/// `-dl` only for a 0.3.DL-R1 join, `-compat` only when the launcher downgraded the join to 0.3.7.
+pub fn to_args(name: &str, host: &str, port: u16, password: Option<&str>, dl: bool, compat: bool) -> Vec<String> {
     let mut args: Vec<String> =
         ["-c", "-n", name, "-h", host, "-p", &port.to_string()].iter().map(|s| s.to_string()).collect();
     if dl {
         args.push("-dl".to_string());
+    }
+    if compat {
+        args.push("-compat".to_string());
     }
     if let Some(p) = password {
         args.extend(["-z".to_string(), p.to_string()]);
@@ -68,7 +77,7 @@ mod tests {
 
     #[test]
     fn roundtrip() {
-        let a = parse(to_args("Rusty", "127.0.0.1", 7777, None, false));
+        let a = parse(to_args("Rusty", "127.0.0.1", 7777, None, false, false));
         assert_eq!(
             a,
             ConnectArgs {
@@ -77,14 +86,23 @@ mod tests {
                 port: Some(7777),
                 password: None,
                 connect: true,
-                dl: false
+                dl: false,
+                compat: false
             }
         );
-        let a = parse(to_args("Rusty", "127.0.0.1", 7777, Some("s3cret"), false));
+        let a = parse(to_args("Rusty", "127.0.0.1", 7777, Some("s3cret"), false, false));
         assert_eq!(a.password.as_deref(), Some("s3cret"));
         assert_eq!(a.name.as_deref(), Some("Rusty"));
-        let a = parse(to_args("Rusty", "127.0.0.1", 7777, None, true));
+        let a = parse(to_args("Rusty", "127.0.0.1", 7777, None, true, false));
         assert!(a.dl);
+        assert!(!a.compat);
+    }
+
+    #[test]
+    fn compat_flag_roundtrips() {
+        let a = parse(to_args("Rusty", "127.0.0.1", 7777, None, false, true));
+        assert!(!a.dl);
+        assert!(a.compat);
     }
 
     #[test]
@@ -103,6 +121,17 @@ mod tests {
     #[test]
     fn tolerates_garbage() {
         let a = parse(s(&["-x", "-p", "notaport", "-n"]));
-        assert_eq!(a, ConnectArgs { name: None, host: None, port: None, password: None, connect: false, dl: false });
+        assert_eq!(
+            a,
+            ConnectArgs {
+                name: None,
+                host: None,
+                port: None,
+                password: None,
+                connect: false,
+                dl: false,
+                compat: false
+            }
+        );
     }
 }

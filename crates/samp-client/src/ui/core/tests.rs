@@ -32,7 +32,7 @@ fn tmpdir(tag: &str) -> PathBuf {
 
 fn connected_ui(dir: Option<PathBuf>) -> UiCore {
     let mut u = UiCore::new(dir, false);
-    u.on_netgame_start("127.0.0.1", 7777, b"RustClient", false);
+    u.on_netgame_start("127.0.0.1", 7777, b"RustClient", false, false);
     u.print_debug(b"Connecting to 127.0.0.1:7777...");
     let g = samp_proto::session::InitGame { server_name: "srv".into(), player_id: 0, ..Default::default() };
     u.on_init_game(&g);
@@ -204,6 +204,17 @@ fn screenshot_index_is_the_first_free_name() {
     u.screenshot_done(None);
     assert_eq!(u.chat.last().unwrap().text, b"Unable to save screenshot.");
     assert_eq!(u.chat.last().unwrap().kind, EntryType::Debug);
+}
+
+#[test]
+fn compat_switch_notice_follows_started() {
+    let mut u = UiCore::new(None, false);
+    u.on_netgame_start("127.0.0.1", 7777, b"RustClient", false, true);
+    let lines: Vec<_> = u.chat.entries().flatten().collect();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0].text, crate::ui::core::msg::STARTED.as_bytes());
+    assert_eq!(lines[1].text, crate::ui::core::msg::COMPAT_SWITCH.as_bytes());
+    assert_eq!(lines[1].kind, EntryType::Debug);
 }
 
 #[test]

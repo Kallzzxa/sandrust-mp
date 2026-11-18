@@ -38,6 +38,9 @@ pub mod msg {
     /// Printed when the netgame object is created.
     pub const STARTED: &str = "{FFFFFF}SA-MP {B9C9BF}0.3.7-R4 {FFFFFF}Started";
     pub const STARTED_DL: &str = "{FFFFFF}MC-RP {B9C9BF}Costum Launcher {FFFFFF}Started";
+    /// Printed after `STARTED` when the launcher downgraded a 0.3.DL-R1 join
+    /// to 0.3.7 because the server cannot take DL clients (compat switch).
+    pub const COMPAT_SWITCH: &str = "The Server Cannot Support 0.3 DL-R1 Switch To 0.3.7";
     /// Printed on each connect attempt.
     pub fn connecting(host: &str, port: u16) -> String {
         format!("Connecting to {host}:{port}...")
@@ -421,12 +424,16 @@ impl UiCore {
     // ---- session -----------------------------------------------------------------
 
     /// The netgame object is created: "Started" (the connect lines come from
-    /// `lifecycle.rs` through the client).
-    pub fn on_netgame_start(&mut self, host: &str, port: u16, name: &[u8], dl: bool) {
+    /// `lifecycle.rs` through the client). When `compat` is set the launcher
+    /// downgraded a DL join to 0.3.7, so the switch notice follows.
+    pub fn on_netgame_start(&mut self, host: &str, port: u16, name: &[u8], dl: bool, compat: bool) {
         self.netgame = true;
         self.local_name = name.to_vec();
         self.connect_host = format!("{host}:{port}");
         self.print_debug(if dl { msg::STARTED_DL.as_bytes() } else { msg::STARTED.as_bytes() });
+        if compat {
+            self.print_debug(msg::COMPAT_SWITCH.as_bytes());
+        }
     }
 
     /// RPC 139 InitGame: netgame state 5.

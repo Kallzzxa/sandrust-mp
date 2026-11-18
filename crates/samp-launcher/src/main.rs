@@ -6,10 +6,19 @@
 //!        [--no-wait] [--dl]
 //!
 //! `--dl` joins as 0.3.DL-R1 (custom models) instead of 0.3.7-R4 (docs/DL-PLAN.md).
+//! Before launching, the server is asked for its version (query opcode `r`):
+//! a 0.3.7 server cannot take a DL client, so the launcher joins as 0.3.7-R4
+//! instead (samp-client-compat behaviour, built into the client) and prints
+//! "The Server Cannot Support 0.3 DL-R1 Switch To 0.3.7". If the server does
+//! not answer the query, the requested mode is used as-is.
 //!
 //! `--dll` may be given several times; the DLLs are loaded in that order
 //! (e.g. `--dll samp-tracer.dll --dll samp.dll`) before the game resumes.
 //! Without `--dll`, `samp_client.dll` next to the launcher is loaded.
+
+use std::io;
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Options {
@@ -23,6 +32,9 @@ struct Options {
     wait: bool,
     /// Join as 0.3.DL-R1 (custom models) instead of 0.3.7-R4.
     dl: bool,
+    /// Set by version negotiation, not a CLI flag: the server is 0.3.7, so the
+    /// client joins as 0.3.7-R4 and the DLL prints the switch notice in-game.
+    compat: bool,
 }
 
 fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String> {
@@ -35,6 +47,7 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String
         password: None,
         wait: true,
         dl: false,
+        compat: false,
     };
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
@@ -82,6 +95,120 @@ fn check_password(p: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Shown when a 0.3.DL-R1 join is downgraded to 0.3.7 because the server
+/// cannot take DL clients (also printed in-game by the client DLL).
+pub const COMPAT_MESSAGE: &str = "The Server Cannot Support 0.3 DL-R1 Switch To 0.3.7";
+
+/// How long the version query gets to answer before the requested mode is used as-is.
+const VERSION_QUERY_TIMEOUT: Duration = Duration::from_millis(1500);
+
+/// Build the `r` (rules) request for `addr` (the server's UDP address).
+fn build_rules_request(addr: SocketAddr) -> Vec<u8> {
+    let mut out = Vec::with_capacity(11);
+    out.extend_from_slice(b"SAMP");
+    match addr.ip() {
+        std::net::IpAddr::V4(v4) => out.extend_from_slice(&v4.octets()),
+        std::net::IpAddr::V6(_) => out.extend_from_slice(&[0, 0, 0, 0]),
+    }
+    out.extend_from_slice(&addr.port().to_le_bytes());
+    out.push(b'r');
+    out
+}
+
+/// Parse an `r` response into (name, value) rules.
+/// Response: `SAMP` + IPv4 (4) + port u16 LE + `r` + rule count u16 LE
+///           + per rule: name_len u8 + name + value_len u8 + value.
+fn parse_rules_response(buf: &[u8]) -> Option<Vec<(String, String)>> {
+    let mut pos = 0usize;
+    let take = |pos: &mut usize, n: usize| -> Option<&[u8]> {
+        let end = pos.checked_add(n)?;
+        let s = buf.get(*pos..end)?;
+        *pos = end;
+        Some(s)
+    };
+    if take(&mut pos, 4)? != b"SAMP" {
+        return None;
+    }
+    let _ip = take(&mut pos, 4)?;
+    let _port = take(&mut pos, 2)?;
+    if take(&mut pos, 1)? != b"r" {
+        return None;
+    }
+    let count = u16::from_le_bytes(take(&mut pos, 2)?.try_into().ok()?);
+    let mut rules = Vec::new();
+    for _ in 0..count {
+        let name_len = *take(&mut pos, 1)?.first()? as usize;
+        let name = String::from_utf8_lossy(take(&mut pos, name_len)?).into_owned();
+        let value_len = *take(&mut pos, 1)?.first()? as usize;
+        let value = String::from_utf8_lossy(take(&mut pos, value_len)?).into_owned();
+        rules.push((name, value));
+    }
+    Some(rules)
+}
+
+/// The server's `version` rule (e.g. "0.3.7-R2", "0.3.DL-R1"), if present.
+fn server_version(rules: &[(String, String)]) -> Option<&str> {
+    rules.iter().find(|(k, _)| k == "version").map(|(_, v)| v.as_str())
+}
+
+/// Whether a server version string is a 0.3.DL server.
+fn is_dl_server(version: &str) -> bool {
+    version.starts_with("0.3.DL")
+}
+
+/// Ask the server for its version (query opcode `r`). `Ok(None)` means the
+/// server did not answer in time.
+fn query_server_version(host: &str, port: u16) -> io::Result<Option<String>> {
+    let addr = format!("{host}:{port}")
+        .to_socket_addrs()?
+        .find(|a| a.is_ipv4())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "could not resolve host"))?;
+    let sock = UdpSocket::bind("0.0.0.0:0")?;
+    sock.set_read_timeout(Some(VERSION_QUERY_TIMEOUT))?;
+    sock.connect(addr)?;
+    sock.send(&build_rules_request(addr))?;
+    let mut buf = [0u8; 2048];
+    match sock.recv(&mut buf) {
+        Ok(n) => Ok(parse_rules_response(&buf[..n]).and_then(|r| server_version(&r).map(str::to_string))),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Decide the join mode: (join as DL, tell the client it was a compat switch).
+/// A DL request against a 0.3.7 server downgrades to 0.3.7-R4; anything else
+/// keeps the requested mode.
+fn negotiate_dl(dl: bool, server_version: Option<&str>) -> (bool, bool) {
+    match (dl, server_version) {
+        (true, Some(v)) if !is_dl_server(v) => (false, true),
+        _ => (dl, false),
+    }
+}
+
+/// Version negotiation for a `--dl` join: ask the server what it is and
+/// downgrade to 0.3.7 when it cannot take a DL client. A server that does
+/// not answer the query keeps the requested mode.
+fn negotiate(mut o: Options) -> Options {
+    if !o.dl {
+        return o;
+    }
+    match query_server_version(&o.host, o.port) {
+        Ok(version) => {
+            let (dl, compat) = negotiate_dl(true, version.as_deref());
+            if compat {
+                eprintln!("{COMPAT_MESSAGE}");
+            }
+            o.dl = dl;
+            o.compat = compat;
+            o
+        }
+        Err(e) => {
+            eprintln!("version query failed ({e}); joining as 0.3.DL-R1 as requested");
+            o
+        }
+    }
+}
+
 /// Quotes one argument for a Windows command line (CommandLineToArgvW rules).
 fn quote_arg(a: &str) -> String {
     if !a.is_empty() && !a.contains([' ', '\t', '"']) {
@@ -122,6 +249,9 @@ fn samp_client_args(o: &Options) -> Vec<String> {
     if o.dl {
         args.push("-dl".to_string());
     }
+    if o.compat {
+        args.push("-compat".to_string());
+    }
     if let Some(p) = &o.password {
         args.extend(["-z".to_string(), p.clone()]);
     }
@@ -136,6 +266,7 @@ fn main() {
             std::process::exit(2);
         }
     };
+    let opts = negotiate(opts);
     std::process::exit(run(&opts));
 }
 
@@ -413,5 +544,72 @@ mod tests {
         assert_eq!(quote_arg("a b"), "\"a b\"");
         assert_eq!(quote_arg("a\"b"), "\"a\\\"b\"");
         assert_eq!(quote_arg("C:\\dir with space\\"), "\"C:\\dir with space\\\\\"");
+    }
+
+    fn sample_rules_response(version: &str) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(b"SAMP");
+        v.extend_from_slice(&[192, 168, 1, 4]);
+        v.extend_from_slice(&7777u16.to_le_bytes());
+        v.push(b'r');
+        let rules = [("version", version), ("mapname", "San Andreas"), ("lagcomp", "On")];
+        v.extend_from_slice(&(rules.len() as u16).to_le_bytes());
+        for (k, val) in rules {
+            v.push(k.len() as u8);
+            v.extend_from_slice(k.as_bytes());
+            v.push(val.len() as u8);
+            v.extend_from_slice(val.as_bytes());
+        }
+        v
+    }
+
+    #[test]
+    fn rules_request_layout() {
+        let addr: SocketAddr = "192.168.1.4:7777".parse().unwrap();
+        // "SAMP" + 192.168.1.4 + port 7777 little-endian (0x61, 0x1E) + 'r'.
+        assert_eq!(build_rules_request(addr), b"SAMP\xc0\xa8\x01\x04\x61\x1er".to_vec());
+    }
+
+    #[test]
+    fn rules_response_parses() {
+        let rules = parse_rules_response(&sample_rules_response("0.3.7-R2")).unwrap();
+        assert_eq!(server_version(&rules), Some("0.3.7-R2"));
+        assert_eq!(rules.len(), 3);
+    }
+
+    #[test]
+    fn rules_response_parses_dl_version() {
+        let rules = parse_rules_response(&sample_rules_response("0.3.DL-R1")).unwrap();
+        assert_eq!(server_version(&rules), Some("0.3.DL-R1"));
+    }
+
+    #[test]
+    fn rules_response_rejects_garbage() {
+        assert!(parse_rules_response(b"").is_none());
+        assert!(parse_rules_response(b"SAMP").is_none());
+        let mut bad = sample_rules_response("0.3.7-R2");
+        bad[10] = b'i'; // wrong opcode
+        assert!(parse_rules_response(&bad).is_none());
+        let mut trunc = sample_rules_response("0.3.7-R2");
+        trunc.truncate(15); // cut inside the first rule
+        assert!(parse_rules_response(&trunc).is_none());
+    }
+
+    #[test]
+    fn negotiate_dl_decisions() {
+        assert_eq!(negotiate_dl(true, Some("0.3.7-R2")), (false, true));
+        assert_eq!(negotiate_dl(true, Some("0.3.7-R4")), (false, true));
+        assert_eq!(negotiate_dl(true, Some("0.3.DL-R1")), (true, false));
+        assert_eq!(negotiate_dl(true, None), (true, false));
+        assert_eq!(negotiate_dl(false, Some("0.3.7-R2")), (false, false));
+        assert_eq!(negotiate_dl(false, Some("0.3.DL-R1")), (false, false));
+    }
+
+    #[test]
+    fn compat_switch_in_command_line() {
+        let mut o = parse_args(s(&["--name", "Rusty", "--dl"])).unwrap();
+        o.dl = false;
+        o.compat = true;
+        assert_eq!(command_line(&o), "gta_sa.exe -c -n Rusty -h 127.0.0.1 -p 7777 -compat");
     }
 }
