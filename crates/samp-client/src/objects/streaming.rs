@@ -12,7 +12,9 @@ pub(super) fn stream(runner: &mut Runner, o: &mut Obj, cam: [f32; 3]) {
     if world::drawn_by_samp(o.has_materials(), o.draw_distance, false) {
         o.drawn_by_samp = false;
         o.cam_dist = dist;
-        if dist <= o.draw_distance {
+        // In range when any part of the bounding sphere is within the draw distance, not only when
+        // the centre is: a large floor/wall is still visible (and stood on) far from its centre.
+        if dist - o.radius <= o.draw_distance {
             if !has_rw {
                 if !runner.run(crate::script::op::HAS_MODEL_LOADED, &[Arg::Int(o.model)]) {
                     runner.run(crate::script::op::REQUEST_MODEL, &[Arg::Int(o.model)]);

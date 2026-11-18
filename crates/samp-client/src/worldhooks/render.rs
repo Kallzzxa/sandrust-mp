@@ -67,8 +67,11 @@ fn draw_object(o: &ObjInfo) {
         return;
     }
     // Visibility: inside the bounding sphere → always; else the RW camera frustum test of the sphere.
+    // A radius of 0 means the model has no collision data to size the sphere from (common for large
+    // map planes/walls); a zero-radius sphere is a single point, and culling on it hides the whole
+    // object whenever its centre leaves the frustum, so such objects are drawn unconditionally.
     let dist = world::dist3(o.centre, camera_pos());
-    if dist > o.radius {
+    if o.radius > 0.0 && dist > o.radius {
         let cam: u32 = rd(g::SCENE_CAMERA);
         if cam == 0 {
             return;
