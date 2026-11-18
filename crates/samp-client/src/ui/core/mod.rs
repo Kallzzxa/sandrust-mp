@@ -37,7 +37,7 @@ pub use netstats::{NetStats, net_stats_text};
 pub mod msg {
     /// Printed when the netgame object is created.
     pub const STARTED: &str = "{FFFFFF}SA-MP {B9C9BF}0.3.7-R4 {FFFFFF}Started";
-    pub const STARTED_DL: &str = "{FFFFFF}SA-MP {B9C9BF}0.3.DL-R1 {FFFFFF}Started";
+    pub const STARTED_DL: &str = "{FFFFFF}MC-RP {B9C9BF}Costum Launcher {FFFFFF}Started";
     /// Printed on each connect attempt.
     pub fn connecting(host: &str, port: u16) -> String {
         format!("Connecting to {host}:{port}...")

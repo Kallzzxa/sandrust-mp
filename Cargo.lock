@@ -49,6 +49,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "samp-launcher-gui"
+version = "0.1.0"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "samp-proto"
 version = "0.1.0"
 
